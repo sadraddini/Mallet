@@ -39,7 +39,7 @@ N.link2link(L[12],L[3])
 
 # xData 
 xData={}
-f = open ( 'volume_inflow900_tau5_noturn_6.txt' , 'r')
+f = open ( 'volume_inflow850_tau10_noturn_length240.txt' , 'r')
 rawX = [ map(int,line.split('	')) for line in f ]
 for t in range(1,len(rawX)+1):
     for i in range(1,13):
@@ -48,9 +48,9 @@ f.close()
 
 uData={}
 # uData: signal
-f1 = open ( 'signal_sg1_inflow900_tau5_noturn_6.txt' , 'r')
+f1 = open ( 'signal_sg1_inflow850_tau10_noturn_length240.txt' , 'r')
 rawU1 = [ map(float,line.split('	')) for line in f1 ]
-f2 = open ( 'signal_sg2_inflow900_tau5_noturn_6.txt' , 'r')
+f2 = open ( 'signal_sg2_inflow850_tau10_noturn_length240.txt' , 'r')
 rawU2 = [ map(float,line.split('	')) for line in f2 ]
 i=1
 k=1
@@ -84,39 +84,31 @@ if True:
                 
     
     
-if True:
+if False:
     for l in N.links:
         print l,l.type,"incoming:",l.incoming,"\toutgoing", l.outgoing   
 
 
-
-
-
-
-
 for i in [7,12,5,4]:
-    L[i].lambda_arrival=900.0/3600*N.tau
-    
-# Initial guesses for turning ratios
-for l in N.links:
-    for k in l.outgoing:
-        N.beta[l,k]=1.0/len(l.outgoing)
-    for k in l.incoming:
-        N.alpha[k,l]=1.0/len(l.incoming)
+    L[i].lambda_arrival=850.0/3600*N.tau
         
 
 N.MILP_1(xData,uData)
-N.MILP_2(xData,uData) 
-N.MILP_1(xData,uData)
-N.MILP_2(xData,uData) 
-N.MILP_1(xData,uData)
+
 
 for l in N.links:
     if l.type=="road":
-        print l, "disturbance=",l.d, "\t free velocity=[",l.v_low,",",l.v_up,"]\t congested speed=[",l.w_low,",",l.w_up,"]\t congested speed*capacity=[",l.wc_low,",",l.wc_up,"]"   
+        print l, "disturbance=",l.d
     
 for l in N.links:
     for k in l.outgoing:
+        print "alpha from ",l," to ",k,":\t",N.alpha[l,k]
         print "beta from ",l," to ",k,":\t",N.beta[l,k]
-    for k in l.incoming:
-        print "alpha from ",k," to ",l,":\t",N.alpha[k,l]
+        print "M from ",l," to ",k,":\t",N.M[l,k]
+        print "c from ",l," to ",k,":\t",N.c[l,k]
+
+if False:
+    for t in range(1,180):
+        print "*"*80,"\n",t,"\n","*"*80
+        for l in N.links:
+            print l, xData[l,t], "\t control:",uData[l,t]
