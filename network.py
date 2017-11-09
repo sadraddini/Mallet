@@ -39,7 +39,7 @@ N.link2link(L[12],L[3])
 
 # xData 
 xData={}
-f = open ( 'volume_inflow850_tau10_noturn_length240.txt' , 'r')
+f = open ( 'volume_inflow1000_tau20_noturn_length1350_4.txt' , 'r')
 rawX = [ map(int,line.split('	')) for line in f ]
 for t in range(1,len(rawX)+1):
     for i in range(1,13):
@@ -48,9 +48,9 @@ f.close()
 
 uData={}
 # uData: signal
-f1 = open ( 'signal_sg1_inflow850_tau10_noturn_length240.txt' , 'r')
+f1 = open ( 'signal_sg1_inflow1000_tau20_noturn_length1350_4.txt' , 'r')
 rawU1 = [ map(float,line.split('	')) for line in f1 ]
-f2 = open ( 'signal_sg2_inflow850_tau10_noturn_length240.txt' , 'r')
+f2 = open ( 'signal_sg2_inflow1000_tau20_noturn_length1350_4.txt' , 'r')
 rawU2 = [ map(float,line.split('	')) for line in f2 ]
 i=1
 k=1
@@ -82,15 +82,28 @@ if True:
                     print l,t,xData[l,t],"to",xData[l,t+1]
                     raise "Error! correct this!"
                 
-    
-    
+if True:
+    for l in N.links:
+        print "\n","*"*80,"\n",l,
+        for t in range(1,NData):
+            print t,xData[l,t],"\t",    
+ 
+if True:
+    for l in N.links:
+        print "\n","*"*80,"\n",l,
+        for t in range(1,NData):
+            print t,uData[l,t],"\t",
+            
+               
 if False:
     for l in N.links:
         print l,l.type,"incoming:",l.incoming,"\toutgoing", l.outgoing   
 
 
+N.tau=20.0
+
 for i in [7,12,5,4]:
-    L[i].lambda_arrival=850.0/3600*N.tau
+    L[i].lambda_arrival=1000.0/3600.0*N.tau
         
 
 N.MILP_1(xData,uData)
@@ -98,7 +111,8 @@ N.MILP_1(xData,uData)
 
 for l in N.links:
     if l.type=="road":
-        print l, "disturbance=",l.d
+        print l, "average disturbance=",l.d
+        print l, "maximal disturbance=",l.dstar
     
 for l in N.links:
     for k in l.outgoing:

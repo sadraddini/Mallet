@@ -90,38 +90,39 @@ class network:
                 for k in l.outgoing:
                     outflow[l,k,t]=model.addVar(lb=0,ub=200)
                     self.c[l,k]=model.addVar(lb=20,ub=200)
-                    self.beta[l,k]=model.addVar(lb=0.2,ub=0.8)
-                    self.alpha[l,k]=model.addVar(lb=0,ub=1)
-                    self.M[l,k]=model.addVar(lb=0,ub=200)
+                    self.beta[l,k,t]=model.addVar(lb=0.1,ub=0.9)
+                    self.alpha[l,k]=model.addVar(lb=1,ub=1)
+                    self.M[l,k]=model.addVar(lb=10,ub=200)
                     d["outflow-1",l,k,t]=model.addVar(vtype=GRB.BINARY) 
                     d["outflow-2",l,k,t]=model.addVar(vtype=GRB.BINARY)        
         model.update()
         for t in range(1,N):
             for l in self.links:
-                if True:
+                if l.type=="road":
                     Q_out[l,t]=LinExpr()
                     Q_in[l,t]=LinExpr()
                     Q_out[l,t].addConstant(0)
                     Q_in[l,t].addConstant(0)
                     for k in l.outgoing:
-                        model.addConstr(outflow[l,k,t]<=self.beta[l,k]*uData[l,t]*xData[l,t])
+                        model.addConstr(outflow[l,k,t]<=self.beta[l,k,t]*uData[l,t]*xData[l,t])
                         model.addConstr(outflow[l,k,t]<=self.M[l,k])
                         model.addConstr(outflow[l,k,t]<=self.c[l,k]-self.alpha[l,k]*xData[k,t])
-                        model.addConstr(outflow[l,k,t]>=self.beta[l,k]*uData[l,t]*xData[l,t]+bigM*d["outflow-1",l,k,t]-bigM)
+                        model.addConstr(outflow[l,k,t]>=self.beta[l,k,t]*uData[l,t]*xData[l,t]+bigM*d["outflow-1",l,k,t]-bigM)
                         model.addConstr(outflow[l,k,t]>=self.M[l,k]+bigM*d["outflow-2",l,k,t]-bigM)
                         model.addConstr(outflow[l,k,t]>=self.c[l,k]-self.alpha[l,k]*xData[k,t]-bigM*d["outflow-1",l,k,t]-bigM*d["outflow-2",l,k,t])
                         Q_out[l,t].add(outflow[l,k,t])
-                    for k in l.incoming:
-                        Q_in[l,t].add(outflow[k,l,t])
+                    for s in l.incoming:
+                        Q_in[l,t].add(outflow[s,l,t])
                 if l.type=="road":
                     model.addConstr(xData[l,t+1]<=xData[l,t]- Q_out[l,t] + Q_in[l,t] + d[l,t] + l.lambda_arrival)  
-                else:
-                    model.addConstr(xData[l,t+1]<=xData[l,t]- uData[l,t]*xData[l,t] + Q_in[l,t] + d[l,t] + l.lambda_arrival)
-        for l in self.links:
-            sum=LinExpr()
-            for k in l.outgoing:
-                sum.add(self.beta[l,k])
-            model.addConstr(sum>=0)
+#                 else:
+#                     model.addConstr(xData[l,t+1]<=xData[l,t]- uData[l,t]*xData[l,t] + Q_in[l,t] + d[l,t] + l.lambda_arrival)
+#         for l in self.links:
+#             if l.type=="road":
+#                 sum=LinExpr()
+#                 for k in l.outgoing:
+#                     sum.add(self.beta[l,k])
+#                 model.addConstr(sum==1)
             
 #         J=QuadExpr()
 #         for l in self.links:
@@ -133,18 +134,36 @@ class network:
         for l in self.links:
             l.d=l.d.X
             for k in l.outgoing:
-                self.beta[l,k]=self.beta[l,k].X
                 self.c[l,k]=self.c[l,k].X
                 self.alpha[l,k]=self.alpha[l,k].X
                 self.M[l,k]=self.M[l,k].X
+        
+        
         for l in self.links:
+            l.d=0.0
+            l.dstar=0
             for t in range(1,N):
-                l.d=max(d[l,t].X,l.d)
+                l.d+=d[l,t].X
+                l.dstar=max(l.dstar,d[l,t].X)
+            for k in l.outgoing:
+                beta=0
+                beta_count=0
+                for t in range(1,N):
+                    beta_count+=uData[l,t]
+                    beta+=self.beta[l,k,t].X*uData[l,t]
+                self.beta[l,k]=beta/beta_count
                 
-            
 
+            l.d/=(N-1)
         
         if True:
+            for l in self.links:
+                print "*"*80,"\n D",l,"\n" 
+                for t in range(1,N):
+                    print "t=",t,"x=",xData[l,t],"control",uData[l,t],"d=",d[l,t].X
+                
+        
+        if False:
             for t in range(1,N):
                 print "*"*80,"time=",t
                 for l in self.links:
