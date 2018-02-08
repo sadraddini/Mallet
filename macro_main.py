@@ -69,14 +69,14 @@ class network:
     
     def MILP_1(self,xData,uData):
         """
-            Here I fix turning ratios and find parameters
             Data= Dictionary
+            Model fitting
         """
         print "\n","*"*80,"\n","MILP 1: Parameter Estimation\n","*"*80        
         model=Model("parameters")
         outflow={}
         d={}
-        bigM=500
+        bigM=2000
         Q_out={}
         Q_in={}
         N=max(l[1] for l in xData.keys())
@@ -84,15 +84,15 @@ class network:
         N=max(l[1] for l in uData.keys())
         print "u Data size is",N
         for l in self.links:
-            l.d=model.addVar(lb=0,ub=200,obj=0*l.type=="road")  
+            l.d=model.addVar(lb=0,ub=1000,obj=0*l.type=="road")  
             for t in range(1,N):
-                d[l,t]=model.addVar(lb=0,ub=200,obj=1)
+                d[l,t]=model.addVar(lb=0,ub=1000,obj=1)
                 for k in l.outgoing:
-                    outflow[l,k,t]=model.addVar(lb=0,ub=200)
-                    self.c[l,k]=model.addVar(lb=20,ub=200)
-                    self.beta[l,k,t]=model.addVar(lb=0.1,ub=0.9)
+                    outflow[l,k,t]=model.addVar(lb=0,ub=500)
+                    self.c[l,k]=model.addVar(lb=20,ub=500)
+                    self.beta[l,k,t]=model.addVar(lb=0.2,ub=0.8)
                     self.alpha[l,k]=model.addVar(lb=1,ub=1)
-                    self.M[l,k]=model.addVar(lb=10,ub=200)
+                    self.M[l,k]=model.addVar(lb=10,ub=500)
                     d["outflow-1",l,k,t]=model.addVar(vtype=GRB.BINARY) 
                     d["outflow-2",l,k,t]=model.addVar(vtype=GRB.BINARY)        
         model.update()
@@ -117,12 +117,13 @@ class network:
                     model.addConstr(xData[l,t+1]<=xData[l,t]- Q_out[l,t] + Q_in[l,t] + d[l,t] + l.lambda_arrival)  
 #                 else:
 #                     model.addConstr(xData[l,t+1]<=xData[l,t]- uData[l,t]*xData[l,t] + Q_in[l,t] + d[l,t] + l.lambda_arrival)
-#         for l in self.links:
-#             if l.type=="road":
-#                 sum=LinExpr()
-#                 for k in l.outgoing:
-#                     sum.add(self.beta[l,k])
-#                 model.addConstr(sum==1)
+        for t in range(1,N):
+            for l in self.links:
+                if l.type=="road":
+                    sum=LinExpr()
+                    for k in l.outgoing:
+                        sum.add(self.beta[l,k,t])
+                    model.addConstr(sum==1)
             
 #         J=QuadExpr()
 #         for l in self.links:
@@ -171,8 +172,70 @@ class network:
                     for k in l.outgoing:
                         print k,"beta:",self.beta[l,k],"outflow",outflow[l,k,t].X             
                         
-                    
-                
-        
-
-        
+    
+    def control_default(self):
+        """
+            Task: finding a s-sequence
+            Input: model
+            output: control time table
+            I also want to find the minimum scaling of worst case diturbances
+        """
+        model=Model("control")
+        T=4
+        x={}
+        u={}
+        d={}
+        out={}
+        for l in self.links:
+            for t in range(0,T+1):
+                x[l,t]=model.addVar(lb=0,ub=200,obj=0)
+                u[l,t]=model.addVar(vtype=GRB.BINARY)
+                for k in l.outgoing:
+                    out[l,k,t]=model.addVar(lb=0,ub=200)
+                    d["outflow-1",l,k,t]=model.addVar(vtype=GRB.BINARY)
+                    d["outflow-2",l,k,t]=model.addVar(vtype=GRB.BINARY)
+        r=model.addVar(lb=0,ub=1,obj=-1)
+        model.update()
+        bigM=1000
+        Q_out={}
+        Q_in={}
+        for t in range(0,T):
+            for l in self.links:
+                if l.type=="road":
+                    Q_out[l,t]=LinExpr()
+                    Q_in[l,t]=LinExpr()
+#                     Q_out[l,t].addConstant(0)
+#                     Q_in[l,t].addConstant(0)
+                    for k in l.outgoing:
+                        model.addConstr(out[l,k,t]<=self.beta[l,k]*x[l,t])
+                        model.addConstr(out[l,k,t]<=u[l,t]*self.M[l,k])
+                        model.addConstr(out[l,k,t]<=self.c[l,k]-self.alpha[l,k]*x[k,t])
+                        model.addConstr(out[l,k,t]>=self.beta[l,k]*x[l,t]+bigM*d["outflow-1",l,k,t]-bigM)
+                        model.addConstr(out[l,k,t]>=u[l,t]*self.M[l,k]+bigM*d["outflow-2",l,k,t]-bigM)
+                        model.addConstr(out[l,k,t]>=self.c[l,k]-self.alpha[l,k]*x[k,t]-bigM*d["outflow-1",l,k,t]-bigM*d["outflow-2",l,k,t])
+                        Q_out[l,t].add(out[l,k,t])
+                    for s in l.incoming:
+                        Q_in[l,t].add(out[s,l,t])
+                if l.type=="road":
+                    model.addConstr(x[l,t+1]==x[l,t]- Q_out[l,t] + Q_in[l,t] + l.d*r + l.lambda_arrival*r) 
+        # Terminal condition:
+        for l in self.links:
+            if l.type=="road":
+                model.addConstr(x[l,T]<=x[l,0])
+        # Antagonistic:
+        for (i,j) in self.antagonistics:
+            for t in range(0,T):
+                model.addConstr(u[i,t]+u[j,t]==1)
+            
+        model.optimize()
+        for l in self.links:
+            if l.type=="road":
+                print l,
+                for t in range(0,T):
+                    print u[l,t].X,
+                print "\n"
+        for l in self.links:
+            if l.type=="road":
+                print "\n",l,"x="
+                for t in range(0,T):
+                    print x[l,t].X,           

@@ -126,3 +126,6 @@ if False:
         print "*"*80,"\n",t,"\n","*"*80
         for l in N.links:
             print l, xData[l,t], "\t control:",uData[l,t]
+
+N.antagonistics=[(L[4],L[11]),(L[12],L[6]),(L[1],L[5]),(L[7],L[9])]
+N.control_default()
